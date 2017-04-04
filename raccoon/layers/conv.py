@@ -98,7 +98,9 @@ class Conv1d:
         bias=True,
         dim_order='tbd',
         border_mode='pad_before',
-        weight_norm=False
+        weight_norm=False,
+        conditional_bias=False,
+        conditional_bias_dim=None
      ):
 
         assert(dim_order in ['tbd', 'btd'])
@@ -109,6 +111,7 @@ class Conv1d:
         self.bias = bias
         self.non_linearity = non_linearity
         self.filter_size = filter_size
+        self.conditional_bias = conditional_bias
 
         if (filter_size == 1) and (self.border_mode != 'valid'):
             print "Warning: for filter-size = 1, only valid conv is supported"
@@ -141,7 +144,7 @@ class Conv1d:
                     (filter_init_val.shape[0], -1)), axis=1)
             norms = create_parameter(norm_values)
             self.params.append(norms)
-            self.W = W * (norms / self.W.reshape(
+            self.W = W * (norms / W.reshape(
                     (W.shape[0], -1)).norm(2, axis=1)
                 ).dimshuffle(0, 'x', 'x', 'x')
         else:
@@ -153,6 +156,26 @@ class Conv1d:
                     np.random.normal(0, 0.01, size=bias_shape)
                 ), "conv_bias")
             self.params.append(self.b)
+
+        if conditional_bias:
+            W_c = create_parameter(
+                init,
+                (conditional_bias_dim, num_filters),
+                'conditional_vector_transformer'
+            )
+            self.params.append(W_c)
+            if weight_norm:
+                filter_init_val = self.W_c.get_value()
+                norm_values_c = np.linalg.norm(
+                    filter_init_val.reshape(
+                        (filter_init_val.shape[0], -1)), axis=1)
+                norms_c = create_parameter(norm_values_c)
+                self.params.append(norms_c)
+                self.W_c = W_c * (norms_c / W_c.reshape(
+                        (W_c.shape[0], -1)).norm(2, axis=1)
+                    ).dimshuffle(0, 'x')
+            else:
+                self.W_c = W_c
 
         if non_linearity == 'gated':
             self.activation = gated_non_linerity
@@ -166,7 +189,7 @@ class Conv1d:
             raise NotImplementedError(
                 "{} non-linearity not implemented!".format(non_linearity))
 
-    def apply(self, x, x_mask=None):
+    def apply(self, x, x_mask=None, cond_vec=None):
         if self.dim_order == 'tbd':
             inp = x.dimshuffle(1, 2, 0, 'x')
         else:
@@ -180,6 +203,10 @@ class Conv1d:
 
         if self.bias:
             conv_out = conv_out + self.b[None, :, None, None]
+
+        if self.conditional_bias:
+            cond_bias = T.dot(self.W_c, cond_vec)
+            conv_out = conv_out + cond_bias[:, :, None, None]
 
         output = self.activation(conv_out)
 
