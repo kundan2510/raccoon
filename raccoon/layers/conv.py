@@ -97,7 +97,8 @@ class Conv1d:
         non_linearity='relu',
         bias=True,
         dim_order='tbd',
-        border_mode='pad_before'
+        border_mode='pad_before',
+        weight_norm=False
      ):
 
         assert(dim_order in ['tbd', 'btd'])
@@ -128,12 +129,30 @@ class Conv1d:
         if bias:
             bias_shape = (num_filters,)
 
-        self.W = create_parameter(init, W_shape, "conv_filter")
+        self.params = []
+
+        W = create_parameter(init, W_shape, "conv_filter")
+        self.params.append(W)
+
+        if weight_norm:
+            filter_init_val = self.W.get_value()
+            norm_values = np.linalg.norm(
+                filter_init_val.reshape(
+                    (filter_init_val.shape[0], -1)), axis=1)
+            norms = create_parameter(norm_values)
+            self.params.append(norms)
+            self.W = W * (norms / self.W.reshape(
+                    (W.shape[0], -1)).norm(2, axis=1)
+                ).dimshuffle(0, 'x', 'x', 'x')
+        else:
+            self.W = W
 
         if bias:
             self.b = shared(
-                floatX(np.random.normal(0, 0.01, size=bias_shape)), "conv_bias")
-        self.params = [self.W, self.b]
+                floatX(
+                    np.random.normal(0, 0.01, size=bias_shape)
+                ), "conv_bias")
+            self.params.append(self.b)
 
         if non_linearity == 'gated':
             self.activation = gated_non_linerity
