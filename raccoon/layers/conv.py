@@ -205,7 +205,7 @@ class Conv1d:
             conv_out = conv_out + self.b[None, :, None, None]
 
         if self.conditional_bias:
-            cond_bias = T.dot(self.W_c, cond_vec)
+            cond_bias = T.dot(cond_vec, self.W_c)
             conv_out = conv_out + cond_bias[:, :, None, None]
 
         output = self.activation(conv_out)
