@@ -14,7 +14,7 @@ def normal_mat(size):
     return np.random.normal(0, 0.001, size=size).astype(floatX)
 
 
-def create_parameter(initializer, shape, name=None):
+def create_parameter(initializer, shape=None, name=None):
     if isinstance(initializer, theano.tensor.sharedvar.SharedVariable):
         return initializer
     elif isinstance(initializer, np.ndarray):

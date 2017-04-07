@@ -98,7 +98,7 @@ class Conv1d:
         bias=True,
         dim_order='tbd',
         border_mode='pad_before',
-        weight_norm=False,
+        weight_norm=True,
         conditional_bias=False,
         conditional_bias_dim=None
      ):
@@ -138,7 +138,7 @@ class Conv1d:
         self.params.append(W)
 
         if weight_norm:
-            filter_init_val = self.W.get_value()
+            filter_init_val = W.get_value()
             norm_values = np.linalg.norm(
                 filter_init_val.reshape(
                     (filter_init_val.shape[0], -1)), axis=1)
@@ -165,7 +165,7 @@ class Conv1d:
             )
             self.params.append(W_c)
             if weight_norm:
-                filter_init_val = self.W_c.get_value()
+                filter_init_val = W_c.get_value()
                 norm_values_c = np.linalg.norm(
                     filter_init_val.reshape(
                         (filter_init_val.shape[0], -1)), axis=1)
