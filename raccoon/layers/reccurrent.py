@@ -60,7 +60,7 @@ class GRULayer:
     def precompute_inputs(self, inputs):
         return T.dot(inputs, self.w_in) + self.b_in
 
-    def step(self, inputs, h_pre, mask=None, process_inputs=False):
+    def step(self, inputs, h_pre, mask=None, process_inputs=True):
         """
         A single timestep.
 
@@ -119,6 +119,83 @@ class GRULayer:
 
         def gru_step_mask(inputs, mask, h_pre):
             return self.step(inputs, h_pre, mask=mask, process_inputs=False)
+
+        if seq_mask:
+            gru_step = gru_step_mask
+            sequences = [seq_inputs, seq_mask]
+        else:
+            gru_step = gru_step_no_mask
+            sequences = [seq_inputs]
+
+        seq_h, scan_updates = theano.scan(
+            fn=gru_step,
+            sequences=sequences,
+            outputs_info=[h_ini],
+            go_backwards=go_backwards)
+
+        return seq_h, scan_updates
+
+
+class MultiLayerGRU:
+    def __init__(
+            self, ls_n_in, n_out,
+            initializer, n_layers=2, grad_clipping=None):
+        self.gru_list = [
+            GRULayer(
+                ls_n_in, n_out, initializer, grad_clipping=grad_clipping)
+        ]
+        for i in range(n_layers-1):
+            self.gru_list.append(
+                GRULayer(
+                    n_out, n_out, initializer,
+                    grad_clipping=grad_clipping
+                )
+            )
+        self.params = []
+        for g in self.gru_list:
+            self.params.extend(g.params)
+
+    def precompute_inputs(self, inputs):
+        return T.dot(inputs, self.gru_list[0].W_in) + self.b_in
+
+    def step(self, inputs, h_pre, mask=None, process_inputs=False):
+        step_h_list = []
+        step_h_list.append(self.gru_list[0].step(
+                inputs, h_pre[:, 0], mask=mask, process_inputs=process_inputs
+            )
+        )
+        for i in range(1, len(self.gru_list)):
+            step_h_list.append(self.gru_list[i].step(
+                    step_h_list[-1], h_pre[:, i], mask=mask,
+                    process_inputs=True
+                )
+            )
+
+        out_h = T.concatenate([h[:, None, :] for h in step_h_list], axis=1)
+        if len(self.gru_list) == 1:
+            return T.unbroadcast(out_h, 1)
+        else:
+            return out_h
+
+    def apply(self, seq_inputs, h_ini, seq_mask=None, go_backwards=False):
+        """
+        Recurse over the whole sequences
+
+        Parameters
+        ----------
+        seq_inputs: (length_sequence, batch_size, n_in)
+        seq_inputs: (length_sequence, batch_size)
+        h_ini: (n_layers, batch_size, n_hidden)
+            Initial hidden state
+        """
+
+        def gru_step_no_mask(inputs, h_pre):
+            return self.step(
+                inputs, h_pre, mask=None)
+
+        def gru_step_mask(inputs, mask, h_pre):
+            return self.step(
+                inputs, h_pre, mask=mask)
 
         if seq_mask:
             gru_step = gru_step_mask

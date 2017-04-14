@@ -167,11 +167,12 @@ class PositionAttentionLayer:
 
         out_att = [h]
         offset = 2*self.n_mechanisms
+        h_att = h[:, -1]
         for i, mech in enumerate(self.ls_mechanisms):
             k_pre, w_pre = args[2*i: 2*i + 2]
             seq_cond, seq_cond_mask = args[offset + 2*i: offset + 2*i + 2]
             a, k, phi, w = self.ls_mechanisms[i].step(
-                h, k_pre, w_pre, seq_cond, seq_cond_mask, mask=mask)
+                h_att, k_pre, w_pre, seq_cond, seq_cond_mask, mask=mask)
             out_att.extend([a, k, phi, w])
 
         # h, a, k, phi, w
